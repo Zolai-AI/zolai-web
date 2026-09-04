@@ -30,3 +30,6 @@ lib/generated/
 .mcp-servers/
 .deploy-checkpoint
 *.tsbuildinfo
+
+# Orchestra session-claims runtime artifact
+.pcore-claims/
