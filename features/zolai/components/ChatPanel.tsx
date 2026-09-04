@@ -128,7 +128,7 @@ export function ChatPanel() {
     } finally {
       setIsStreaming(false);
     }
-  }, [input, isStreaming, messages]);
+  }, [input, isStreaming, messages, model]);
 
   return (
     <div className="flex flex-col gap-4 h-full">

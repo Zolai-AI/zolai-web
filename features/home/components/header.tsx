@@ -54,7 +54,6 @@ export function Header({ siteSettings = [] }: HeaderProps) {
 
   const siteName = getSetting("site_name", DEFAULT_SITE_NAME);
   const isSticky = getSetting("header_sticky", "true") === "true";
-  const showSearch = getSetting("header_show_search", "true") === "true";
 
   return (
     <header className={cn("z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60", isSticky && "sticky top-0")}>

@@ -17,7 +17,7 @@ function spreadLatLon(idx: number, total: number): { lat: number; lon: number } 
   // Fibonacci sphere distribution for even spread
   const golden = Math.PI * (3 - Math.sqrt(5));
   const y = 1 - (idx / Math.max(1, total - 1)) * 2;
-  const radius = Math.sqrt(1 - y * y);
+  const _radius = Math.sqrt(1 - y * y);
   const theta = golden * idx;
   const lat = (Math.asin(y) * 180) / Math.PI;
   const lon = ((theta * 180) / Math.PI) % 360 - 180;

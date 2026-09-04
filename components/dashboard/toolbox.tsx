@@ -6,8 +6,8 @@ import { zolaiToolClient } from "@/lib/api/zolai-tools";
 export function Toolbox() {
   const [activeTab, setActiveTab] = useState<"dict" | "grammar">("dict");
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const [grammarResult, setGrammarResult] = useState<any>(null);
+  const [results, setResults] = useState<Array<{ headword: string; translations: string[] }>>([]);
+  const [grammarResult, setGrammarResult] = useState<{ is_valid: boolean; feedback: string; suggestions?: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSearch = async () => {

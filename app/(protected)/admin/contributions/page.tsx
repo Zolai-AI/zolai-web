@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import * as React from "react";
 
 type Contribution = {
   id: string;
@@ -13,12 +13,12 @@ type Contribution = {
 };
 
 export default function AdminContributionsPage() {
-  const [items, setItems] = useState<Contribution[]>([]);
+  const [items, setItems] = React.useState<Contribution[]>([]);
 
-  async function load() {
+  const load = React.useCallback(async () => {
     const res = await fetch("/api/contributions");
-    setItems(await res.json());
-  }
+    if (res.ok) setItems(await res.json());
+  }, []);
 
   async function act(id: string, action: "approve" | "reject") {
     await fetch(`/api/contributions/${id}`, {
@@ -26,10 +26,10 @@ export default function AdminContributionsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     });
-    load();
+    void load();
   }
 
-  useEffect(() => { load(); }, []);
+  React.useEffect(() => { void load(); }, [load]);
 
   const pending = items.filter((i) => i.status === "pending");
   const done = items.filter((i) => i.status !== "pending");

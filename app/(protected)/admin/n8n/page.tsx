@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import * as React from "react";
 import Link from "next/link";
 
 type PipelineRun = {
@@ -12,21 +12,21 @@ type Stats = {
 };
 
 export default function N8nDashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [triggering, setTriggering] = useState(false);
+  const [stats, setStats] = React.useState<Stats | null>(null);
+  const [triggering, setTriggering] = React.useState(false);
 
-  async function load() {
+  const load = React.useCallback(async () => {
     const res = await fetch("/api/admin/n8n-dashboard");
     if (res.ok) setStats(await res.json());
-  }
+  }, []);
 
   async function triggerPipeline() {
     setTriggering(true);
     await fetch(`${process.env.NEXT_PUBLIC_ZOLAI_API_URL ?? "http://localhost:8000"}/api/pipeline/trigger`, { method: "POST" });
-    setTimeout(() => { setTriggering(false); load(); }, 2000);
+    setTimeout(() => { setTriggering(false); void load(); }, 2000);
   }
 
-  useEffect(() => { load(); }, []);
+  React.useEffect(() => { void load(); }, [load]);
 
   const statusColor = (s: string) =>
     ({ done: "text-green-600", error: "text-red-600", running: "text-blue-600" }[s] ?? "text-gray-500");

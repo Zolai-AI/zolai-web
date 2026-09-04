@@ -66,8 +66,8 @@ export function ChatApp() {
     const payload = await resp.json() as { success?: boolean; data?: unknown };
     const arr = Array.isArray(payload?.data) ? payload.data : [];
     const names = arr
-      .map((x: any) => x?.name)
-      .filter((n: any): n is string => typeof n === "string" && n.length > 0);
+      .map((x: unknown) => (x && typeof x === "object" ? (x as { name?: unknown }).name : undefined))
+      .filter((n): n is string => typeof n === "string" && n.length > 0);
     setModels(names);
     if (names.length > 0 && !names.includes(model)) setModel(names[0]);
   }, [model]);
@@ -79,12 +79,15 @@ export function ChatApp() {
     const items = Array.isArray(payload?.data) ? payload.data : [];
     setHistory(
       items
-        .map((x: any) => ({
-          id: String(x?.id ?? ""),
-          title: typeof x?.title === "string" ? x.title : undefined,
-          updated_at: typeof x?.updatedAt === "string" ? x.updatedAt : (typeof x?.updated_at === "string" ? x.updated_at : undefined),
-          model: typeof x?.model === "string" ? x.model : undefined,
-        }))
+        .map((x: unknown) => {
+          const obj = x && typeof x === "object" ? x as Record<string, unknown> : {};
+          return {
+            id: String(obj.id ?? ""),
+            title: typeof obj.title === "string" ? obj.title : undefined,
+            updated_at: typeof obj.updatedAt === "string" ? obj.updatedAt : (typeof obj.updated_at === "string" ? obj.updated_at : undefined),
+            model: typeof obj.model === "string" ? obj.model : undefined,
+          };
+        })
         .filter((x: HistoryItem) => x.id.length > 0),
     );
   }, []);
@@ -97,7 +100,7 @@ export function ChatApp() {
         setStatusText(`Status check failed (HTTP ${resp.status}).`);
         return;
       }
-      const payload = await resp.json() as any;
+      const payload = await resp.json() as { success?: boolean; data?: { ok?: boolean; error?: unknown } };
       if (payload?.success && payload?.data?.ok === true) {
         setStatusOk(true);
         setStatusText(null);
@@ -122,11 +125,14 @@ export function ChatApp() {
     try {
       const resp = await fetch(`/api/zolai/ai/chats/${encodeURIComponent(id)}`);
       if (!resp.ok) throw new Error("Failed to load chat");
-      const payload = await resp.json() as { success?: boolean; data?: any };
+      const payload = await resp.json() as { success?: boolean; data?: { providerChatId?: unknown; messages?: Array<{ role?: unknown; content?: unknown }> } };
       const thread = payload?.data;
       setProviderChatId(typeof thread?.providerChatId === "string" ? thread.providerChatId : null);
       const msgs: Msg[] = (thread?.messages ?? [])
-        .map((t: any) => ({ role: t?.role === "user" ? "user" : "assistant", content: String(t?.content ?? "") }))
+        .map((t) => {
+          const obj = t && typeof t === "object" ? t as Record<string, unknown> : {};
+          return { role: obj.role === "user" ? "user" as const : "assistant" as const, content: String(obj.content ?? "") };
+        })
         .filter((m: Msg) => m.content.trim().length > 0);
       setMessages(msgs.length ? msgs : [{ role: "assistant", content: "Chat is empty." }]);
       setMobileSidebarOpen(false);
@@ -152,7 +158,7 @@ export function ChatApp() {
       body: JSON.stringify({ title, model, provider: "gemini-server" }),
     });
     if (!resp.ok) throw new Error("Failed to create chat");
-    const payload = await resp.json() as any;
+    const payload = await resp.json() as { data?: { id?: unknown } };
     const id = String(payload?.data?.id ?? "");
     if (!id) throw new Error("Failed to create chat");
     setThreadId(id);
@@ -208,9 +214,9 @@ export function ChatApp() {
         for (const evt of events) {
           const dataStr = extractDataLine(evt);
           if (!dataStr) continue;
-          let payload: any;
+          let payload: Record<string, unknown> | null = null;
           try {
-            payload = JSON.parse(dataStr);
+            payload = JSON.parse(dataStr) as Record<string, unknown>;
           } catch {
             continue;
           }
@@ -242,10 +248,6 @@ export function ChatApp() {
     try {
       await streamOnce();
       // Persist assistant message after stream finishes
-      const assistant = (() => {
-        const last = messages[messages.length - 1];
-        return last?.role === "assistant" ? last.content : "";
-      })();
       // We can't reliably read state synchronously; take it from rendered state after a tick
       setTimeout(() => {
         const latest = (document.querySelector("[data-chat-last-assistant]") as HTMLElement | null)?.innerText ?? "";
@@ -261,14 +263,14 @@ export function ChatApp() {
           body: JSON.stringify({
             messages: [...messages, { role: "user", content: text }],
             model,
-            chat_id: chatId ?? undefined,
+            chat_id: providerChatId ?? undefined,
           }),
         });
         if (!resp2.ok) throw e;
-        const payload = await resp2.json() as any;
+        const payload = await resp2.json() as { data?: { text?: unknown; message?: { content?: unknown }; chat_id?: unknown }; text?: unknown; chat_id?: unknown };
         const content = String(payload?.data?.text ?? payload?.text ?? payload?.data?.message?.content ?? "");
         const nextChatId = payload?.data?.chat_id ?? payload?.chat_id;
-        if (nextChatId && !chatId) setChatId(String(nextChatId));
+        if (nextChatId && !providerChatId) setProviderChatId(String(nextChatId));
         setMessages((prev) => {
           const next = [...prev];
           const lastIdx = next.length - 1;
