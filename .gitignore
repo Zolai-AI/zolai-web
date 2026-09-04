@@ -23,3 +23,4 @@ lib/generated/
 .kiro/
 .mcp-servers/
 .deploy-checkpoint
+*.tsbuildinfo
