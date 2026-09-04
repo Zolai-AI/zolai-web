@@ -1,5 +1,13 @@
 # AGENTS.md — Zolai AI Web Platform
 
+## Shared Data
+- Corpora, datasets, and bulk artifacts live in the container shared folder at `../data` (relative to this repo). This is **not** committed to this repo — it is a shared, gitignored directory (6.3G) across all six repos. Seed data referenced in scripts uses `${ZOLAI_ROOT:-../..}/data/`.
+- See `../data/README.md` and `../data/DATA_INDEX.md` for data inventory.
+
+## Scoping
+- This is a **single-repo**. Scope all reads, globs, and searches to this repo root only. Do not scan sibling directories (especially `../data`, `../zolai-ai`, `../zolai-wiki`). Use repo-relative paths.
+- Respect `.ignore` and `.cursorignore` — use `rg` (respects them) instead of bare `find` or `grep -r`.
+
 ## 🛠 Commands
 
 ```bash
