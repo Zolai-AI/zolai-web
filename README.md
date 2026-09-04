@@ -139,6 +139,6 @@ scripts/
 
 This repo is a component of the **[Zolai-AI](https://github.com/Zolai-AI)** organization — see the
 [org profile](https://github.com/Zolai-AI) for the full ecosystem and
-[`.github/CONTRIBUTING.md`](https://github.com/Zolai-AI/.github/blob/main/community/CONTRIBUTING.md) to contribute.
+[`.github/CONTRIBUTING.md`](https://github.com/Zolai-AI/.github/blob/main/CONTRIBUTING.md) to contribute.
 
 `zolai-core` · `zolai-tauri` · `zolai-datasets` · `zolai-training` · `zolai-wiki` · `zolai-ai` (monorepo)
