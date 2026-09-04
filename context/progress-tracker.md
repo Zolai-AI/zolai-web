@@ -4,3 +4,7 @@
 - Repo connected to `Zolai-AI/zolai-web`.
 - Received `website/` (3.4GB Next.js app) from monorepo distribution.
 - Push unblocked after removing Slack webhook test URLs.
+
+## 2026-09-04
+- Flattened website structure (source moved from website/zolai-project/ to repo root)
+- Fixed ESLint warnings
