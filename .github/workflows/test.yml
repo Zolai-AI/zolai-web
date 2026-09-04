@@ -2,9 +2,9 @@ name: Testing Pipeline
 
 on:
   push:
-    branches: [develop, master, 'feature/**', 'feat/**']
+    branches: [develop, main, 'feature/**', 'feat/**']
   pull_request:
-    branches: [develop, master]
+    branches: [develop, main]
 
 jobs:
   # Lint and typecheck
