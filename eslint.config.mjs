@@ -26,6 +26,7 @@ const eslintConfig = defineConfig([
   {
     rules: {
       "react/display-name": "off",
+      "@next/next/no-location-assign-relative-destination": "off",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {
