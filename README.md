@@ -66,6 +66,31 @@ ZOLAI_API_URL=http://<SERVER_IP>:18789/chat   # Fine-tuned LLM endpoint
 
 ---
 
+## Database Setup (Neon)
+
+1. Create a free account at [neon.tech](https://neon.tech)
+2. Create a new project (select a region close to your users)
+3. Copy the **pooled connection string** from the Neon dashboard
+4. Create `.env.local` from `.env.example` and paste the `DATABASE_URL`
+5. Run migrations:
+   ```bash
+   bunx prisma migrate dev --name init
+   ```
+6. Seed the database:
+   ```bash
+   bunx tsx scripts/seed-dictionary.ts
+   bunx tsx scripts/seed-curriculum.ts
+   bunx tsx scripts/import-wiki.ts
+   ```
+7. Generate Prisma client:
+   ```bash
+   bunx prisma generate
+   ```
+
+**Neon free tier:** 0.5 GB storage, 24/7 compute for 512 MB RAM — sufficient for dev/small production.
+
+---
+
 ## API Endpoints
 
 ```
