@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zolai Desktop</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 20px; color: #38bdf8; }
+    .header span { color: #94a3b8; font-size: 12px; }
+    .container { display: flex; height: calc(100vh - 56px); }
+    .sidebar { width: 200px; background: #1e293b; padding: 12px; border-right: 1px solid #334155; }
+    .sidebar button { display: block; width: 100%; padding: 9px 10px; margin-bottom: 4px; background: none; border: 1px solid transparent; color: #94a3b8; text-align: left; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .sidebar button:hover, .sidebar button.active { background: #334155; color: #38bdf8; border-color: #475569; }
+    .main { flex: 1; padding: 20px; overflow-y: auto; }
+    .main h2 { color: #38bdf8; margin-bottom: 12px; font-size: 17px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .card h3 { color: #f1f5f9; margin-bottom: 8px; font-size: 14px; }
+    input { background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px 12px; border-radius: 6px; font-size: 13px; width: 100%; margin-bottom: 8px; }
+    input:focus { outline: none; border-color: #38bdf8; }
+    .btn { background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; margin-right: 6px; }
+    .btn:hover { background: #1d4ed8; }
+    .results { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 12px; margin-top: 10px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    .hidden { display: none; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid #334155; font-size: 13px; }
+    th { color: #94a3b8; font-weight: 600; }
+    .cover-bar { height: 6px; background: #334155; border-radius: 3px; margin-top: 4px; }
+    .cover-fill { height: 100%; background: #38bdf8; border-radius: 3px; }
+    .status { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .ok { background: #064e3b; color: #6ee7b7; }
+    .warn { background: #78350f; color: #fbbf24; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🦜 Zolai Desktop</h1>
+    <span>v0.1.0</span>
+  </div>
+  <div class="container">
+    <div class="sidebar">
+      <button class="active" onclick="show('home',this)">🏠 Home</button>
+      <button onclick="show('dict',this)">📖 Dictionary</button>
+      <button onclick="show('bible',this)">📜 Bible</button>
+      <button onclick="show('my',this)">🇲🇲 Myanmar</button>
+      <button onclick="show('add',this)">➕ Add Word</button>
+      <button onclick="show('gemini',this)">🤖 Gemini</button>
+      <button onclick="show('health',this)">💚 Health</button>
+    </div>
+    <div class="main" id="content">
+      <div id="p-home"><h2>Dashboard</h2><div class="card"><h3>Quick Stats</h3><div id="stats">Click Health to load...</div></div></div>
+      <div id="p-dict" class="hidden"><h2>Dictionary Search (ZO↔EN↔MY)</h2><div class="card"><input id="dq" placeholder="Search word..." onkeydown="if(event.key==='Enter')doDict()"><button class="btn" onclick="doDict()">Search</button><div id="dr" class="results" style="display:none"></div></div></div>
+      <div id="p-bible" class="hidden"><h2>Bible Search</h2><div class="card"><input id="bq" placeholder="Search verses..." onkeydown="if(event.key==='Enter')doBible()"><button class="btn" onclick="doBible()">Search</button><div id="br" class="results" style="display:none"></div></div></div>
+      <div id="p-my" class="hidden"><h2>Myanmar Dictionary</h2><div class="card"><input id="mq" placeholder="Myanmar word..." onkeydown="if(event.key==='Enter')doMy()"><button class="btn" onclick="doMy()">Search</button><div id="mr" class="results" style="display:none"></div></div></div>
+      <div id="p-add" class="hidden"><h2>Add New Word</h2><div class="card"><h3>Zolai</h3><input id="a-zo" placeholder="Zolai word"><h3>English</h3><input id="a-en" placeholder="English meaning"><h3>Myanmar</h3><input id="a-my" placeholder="Myanmar (optional)"><button class="btn" onclick="doAdd()">Add Word</button><div id="ar" class="results" style="display:none"></div></div></div>
+      <div id="p-gemini" class="hidden"><h2>Gemini Translation</h2><div class="card"><h3>Fill Missing Myanmar</h3><p style="color:#94a3b8;font-size:12px;margin-bottom:8px">Translates English→Myanmar for entries missing Myanmar</p><input id="g-limit" type="number" value="50" style="width:100px"><button class="btn" onclick="doGemini('my')">Fill Myanmar</button><div id="gr" class="results" style="display:none;margin-top:10px"></div></div></div>
+      <div id="p-health" class="hidden"><h2>System Health</h2><div class="card"><button class="btn" onclick="doHealth()">Refresh</button><div id="hr" class="results" style="display:none"></div></div></div>
+    </div>
+  </div>
+  <script>
+    const A='http://localhost:8000';
+    function show(id,btn){document.querySelectorAll('[id^="p-"]').forEach(e=>e.classList.add('hidden'));document.getElementById('p-'+id).classList.remove('hidden');document.querySelectorAll('.sidebar button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='health')doHealth();if(id==='home')doHealth();}
+    async function api(p){try{const r=await fetch(A+p);return await r.json();}catch(e){return{error:'API offline — start: cd zolai-core && python -m uvicorn zolai.api.server:app --port 8000'};}}
+    async function doHealth(){const el=document.getElementById('hr');el.style.display='block';el.textContent='Loading...';const d=await api('/monitor/health');el.textContent=JSON.stringify(d,null,2);const st=document.getElementById('stats');if(!d.error){let h='';for(const[k,v]of Object.entries(d)){if(typeof v==='number')h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #334155"><span>'+k+'</span><span style="color:#38bdf8">'+v.toLocaleString()+'</span></div>';}st.innerHTML=h;}}
+    async function doDict(){const q=document.getElementById('dq').value;const el=document.getElementById('dr');el.style.display='block';el.textContent='Searching...';const d=await api('/dictionary/search/all?q='+encodeURIComponent(q));if(d.error){el.textContent=d.error;return;}const r=d.results||d;el.textContent=r.slice(0,30).map(e=>e.zolai+' → '+(e.english_clean||e.english||'')+(e.myanmar?'  MY: '+e.myanmar:'')).join('\n');}
+    async function doBible(){const q=document.getElementById('bq').value;const el=document.getElementById('br');el.style.display='block';el.textContent='Searching...';const d=await api('/bible/search?q='+encodeURIComponent(q));if(d.error){el.textContent=d.error;return;}const r=d.results||d;el.textContent=r.slice(0,20).map(e=>e.ref+': '+e.zo_tdb77).join('\n\n');}
+    async function doMy(){const q=document.getElementById('mq').value;const el=document.getElementById('mr');el.style.display='block';el.textContent='Searching...';const d=await api('/dictionary/search/my?q='+encodeURIComponent(q));el.textContent=JSON.stringify(d,null,2);}
+    async function doAdd(){const zo=document.getElementById('a-zo').value,en=document.getElementById('a-en').value,my=document.getElementById('a-my').value;const el=document.getElementById('ar');el.style.display='block';el.textContent='Adding...';const r=await fetch(A+'/dictionary/add?word='+encodeURIComponent(zo)+'&english='+encodeURIComponent(en)+'&myanmar='+encodeURIComponent(my),{method:'POST'});const d=await r.json();el.textContent=JSON.stringify(d,null,2);}
+    async function doGemini(type){const limit=document.getElementById('g-limit').value;const el=document.getElementById('gr');el.style.display='block';el.textContent='Starting Gemini translation (check terminal)...';el.textContent+='\\nRun: cd zolai-datasets && python3 scripts/my/gemini_translate.py --fill-'+type+' --limit '+limit;}
+    doHealth();
+  </script>
+</body>
+</html>
