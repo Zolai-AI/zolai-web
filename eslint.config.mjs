@@ -27,6 +27,8 @@ const eslintConfig = defineConfig([
     rules: {
       "react/display-name": "off",
       "@next/next/no-location-assign-relative-destination": "off",
+      // Next 16 / React 19 compiler rule — noisy on mount sync & debounced effects
+      "react-hooks/set-state-in-effect": "off",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {
