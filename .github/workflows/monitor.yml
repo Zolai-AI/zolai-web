@@ -5,29 +5,74 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+# zolai.space is the org landing (Cloudflare Workers), not the Next.js learner app.
+# Bot Fight Mode returns HTTP 403 (cf-mitigated: challenge) to bare curl — treat that as edge UP.
+# Optional secret APP_HEALTH_URL = full URL to Next /api/cron/health when the app is publicly reachable.
+
 jobs:
   health:
     runs-on: ubuntu-latest
     steps:
-      - name: Check site health
+      - name: Check landing edge (zolai.space)
         id: check
+        env:
+          APP_HEALTH_URL: ${{ secrets.APP_HEALTH_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-            "${NEXT_PUBLIC_APP_URL:-https://zolai.space}/api/cron/health?secret=${{ secrets.CRON_SECRET }}")
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "HTTP status: $STATUS"
-          [ "$STATUS" = "200" ] || exit 1
+          set -euo pipefail
+          URL="${NEXT_PUBLIC_APP_URL:-https://zolai.space}/"
+          BODY=$(mktemp)
+          STATUS=$(curl -s -o "$BODY" -w "%{http_code}" --max-time 15 -L \
+            -A "Zolai-Monitor/1.0 (+https://github.com/Zolai-AI)" \
+            "$URL" || echo "000")
+          CF=$(grep -ci "cf-mitigated\|Just a moment\|challenge-platform" "$BODY" || true)
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "Landing HTTP status: $STATUS (cf_challenge_markers=$CF)"
+
+          if [ "$STATUS" = "200" ]; then
+            echo "Landing OK"
+          elif [ "$STATUS" = "403" ] && [ "$CF" -gt 0 ]; then
+            echo "Landing edge UP (Cloudflare challenge to bots — expected)"
+          elif [ "$STATUS" = "000" ]; then
+            echo "ERROR: connection failed"
+            exit 1
+          else
+            echo "ERROR: unexpected status $STATUS"
+            head -c 400 "$BODY" || true
+            exit 1
+          fi
+
+          # Org GitHub Pages (no bot fight)
+          PAGES=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "https://zolai-ai.github.io/" || echo "000")
+          echo "GitHub Pages status: $PAGES"
+          [ "$PAGES" = "200" ] || exit 1
+
+          # Optional: real Next app health when secret is configured
+          if [ -n "${APP_HEALTH_URL:-}" ]; then
+            SEP='?'
+            case "$APP_HEALTH_URL" in *\?*) SEP='&' ;; esac
+            HURL="$APP_HEALTH_URL"
+            if [ -n "${CRON_SECRET:-}" ]; then
+              HURL="${APP_HEALTH_URL}${SEP}secret=${CRON_SECRET}"
+            fi
+            HSTATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$HURL" || echo "000")
+            echo "App health HTTP: $HSTATUS"
+            [ "$HSTATUS" = "200" ] || exit 1
+          else
+            echo "APP_HEALTH_URL not set — skipping Next cron health (landing-only monitor)"
+          fi
 
       - name: Alert on failure
         if: failure()
         run: |
-          MESSAGE="🚨 <b>Zolai DOWN</b>%0AHTTP ${{ steps.check.outputs.status }}%0ATime: $(date -u '+%Y-%m-%d %H:%M UTC')"
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=${MESSAGE}&parse_mode=HTML"
+          MESSAGE="🚨 <b>Zolai edge check FAILED</b>%0AHTTP ${{ steps.check.outputs.status }}%0ATime: $(date -u '+%Y-%m-%d %H:%M UTC')"
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=${MESSAGE}&parse_mode=HTML" || true
+          else
+            echo "Telegram secrets missing; alert skipped"
+          fi
 
-      - name: Alert on recovery
+      - name: OK
         if: success()
-        run: |
-          # Only send recovery if previous run failed (GitHub doesn't track this natively,
-          # so we rely on the app's own recovery alert system via /api/cron/health)
-          echo "Site is healthy ✅"
+        run: echo "Edge monitors healthy ✅"

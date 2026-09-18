@@ -52,9 +52,28 @@ jobs:
             systemctl is-active zolai-next
 
       - name: Health check
+        env:
+          APP_HEALTH_URL: ${{ secrets.APP_HEALTH_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           sleep 10
-          curl -f https://zolai.space/api/cron/health || exit 1
+          # Prefer explicit Next app URL; zolai.space is landing (Workers), not /api/cron/*
+          if [ -n "${APP_HEALTH_URL:-}" ]; then
+            SEP='?'
+            case "$APP_HEALTH_URL" in *\?*) SEP='&' ;; esac
+            HURL="$APP_HEALTH_URL"
+            [ -n "${CRON_SECRET:-}" ] && HURL="${APP_HEALTH_URL}${SEP}secret=${CRON_SECRET}"
+            curl -fsS --max-time 30 "$HURL" || exit 1
+          else
+            # Landing edge: 200 OK or Cloudflare bot challenge (403) counts as reachable
+            BODY=$(mktemp)
+            STATUS=$(curl -s -o "$BODY" -w "%{http_code}" --max-time 30 -L https://zolai.space/ || echo "000")
+            if [ "$STATUS" = "200" ]; then exit 0; fi
+            if [ "$STATUS" = "403" ] && grep -qi "Just a moment\|cf-mitigated\|challenge" "$BODY"; then
+              echo "Landing edge reachable (CF challenge)"; exit 0
+            fi
+            echo "Health check failed status=$STATUS"; exit 1
+          fi
 
       - name: Notify Telegram on failure
         if: failure()
