@@ -89,6 +89,14 @@ grep -rn "hono-client" features app --include="*.ts" --include="*.tsx"
 
 ---
 
+## 🎨 UI Work
+
+For page/section/layout design, color systems, typography scales, responsive, and design
+QA, use the installed `web-design-master` skill at `~/.agents/skills/web-design-master`
+(+ `ui-ux-pro-max`, `design-system`, `ui-styling`). Persist tokens into `context/ui-context.md`.
+
+---
+
 ## 💾 Database
 
 **Provider:** PostgreSQL (Neon) via `@prisma/adapter-pg`
