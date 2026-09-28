@@ -2,7 +2,10 @@ name: Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # 6h cadence: GitHub throttles scheduled workflows on public repos, so a
+    # tighter cron does not actually run more often (measured ~3.5h median gap).
+    # Edge uptime does not need sub-hour granularity.
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 # zolai.space is the org landing (Cloudflare Workers), not the Next.js learner app.
@@ -12,6 +15,9 @@ on:
 jobs:
   health:
     runs-on: ubuntu-latest
+    concurrency:
+      group: zolai-edge-monitor
+      cancel-in-progress: true
     steps:
       - name: Check landing edge (zolai.space)
         id: check
