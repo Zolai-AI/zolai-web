@@ -180,3 +180,8 @@ docs/
 ├── testing/          # Testing strategy and monitoring guides — (planned)
 └── archive/          # Starter template / generic Next.js docs
 ```
+
+## Secret Hygiene (repo-specific)
+
+- **`NEXT_PUBLIC_*` env vars are compiled into the client bundle — they are public by definition.** Never put a key there; server-only secrets are read in route handlers/server code.
+- Canonical rules: workspace-root `AGENTS.md` § Secret Hygiene. Full procedure: `../context/code-standards.md` § Secret Hygiene — Prevention. Staged-change scan gate: `secret-scan` subagent; checklist: `secret-hygiene` skill. Do not duplicate that block here.
