@@ -174,7 +174,7 @@ docs/
 ├── audit/            # Codebase audits, compliance, security reviews — (planned)
 ├── auth/             # Better Auth docs, refactoring guides — (planned)
 ├── features/         # Feature-specific implementation docs — (planned)
-├── mcp/              # MCP server setup and registry — (planned)
+├── mcp/              # MCP integration notes — the live MCP server is a route in zolai-core
 ├── planning/         # Roadmaps, MVP plans, branching strategy — (planned)
 ├── references/       # Library quick-refs (Prisma, Hono, shadcn, etc.) — (planned)
 ├── testing/          # Testing strategy and monitoring guides — (planned)
