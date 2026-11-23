@@ -1,0 +1,44 @@
+project:
+  name: zolai-web
+  slug: zolai-web
+  display_name: zolai-web
+  type: web
+  category: ai-platform
+  owner: Zolai-AI
+
+  description: >
+    Learner platform (Next.js + Hono + Prisma).
+
+version:
+  current: 2.0.0
+  channel: dev
+  release_name: genesis
+  build_number: 001
+
+lifecycle:
+  stage: development
+  status: active
+  started: 2024-01-01
+  updated: 2026-11-23
+
+repository:
+  url: git@github.com:Zolai-AI/zolai-web.git
+  branch: main
+  provider: github
+  visibility: public
+
+stack:
+  languages:
+    - typescript
+  frameworks:
+    - nextjs
+    - hono
+    - prisma
+  package_manager: bun
+  runtime: node
+
+ai:
+  assistant: cursor
+  context_dir: context/
+  entry_point: AGENTS.md
+  rules: []
