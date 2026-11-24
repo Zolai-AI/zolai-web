@@ -1,7 +1,7 @@
 # AGENTS.md — Zolai AI Web Platform
 
 ## Shared Data
-- Corpora, datasets, and bulk artifacts live in the container shared folder at `../data` (relative to this repo). This is **not** committed to this repo — it is a shared, gitignored directory (6.3G) across all six repos. Seed data referenced in scripts uses `${ZOLAI_ROOT:-../..}/data/`.
+- Corpora, datasets, and bulk artifacts live in the container shared folder at `../data` (relative to this repo). This is **not** committed to this repo — it is a shared, gitignored directory across the Zolai-AI org repos. Seed data referenced in scripts uses `${ZOLAI_ROOT:-../..}/data/`.
 - See `../data/README.md` and `../data/DATA_INDEX.md` for data inventory.
 
 ## Scoping
@@ -185,3 +185,31 @@ docs/
 
 - **`NEXT_PUBLIC_*` env vars are compiled into the client bundle — they are public by definition.** Never put a key there; server-only secrets are read in route handlers/server code.
 - Canonical rules: workspace-root `AGENTS.md` § Secret Hygiene. Full procedure: `../context/code-standards.md` § Secret Hygiene — Prevention. Staged-change scan gate: `secret-scan` subagent; checklist: `secret-hygiene` skill. Do not duplicate that block here.
+
+## Workspace alignment (2026-11-24)
+
+`zolai-web` keeps its Next.js + Hono + Prisma architecture. This repo follows the
+workspace-canonical 7-stage SDLC and document map; no stage gate is skipped.
+
+### ALIGNMENT RECORD — zolai-web
+
+- Canonical SDLC: [`../docs/SDLC.md`](../docs/SDLC.md)
+- Canonical source-of-truth: [`../docs/governance/source-of-truth.md`](../docs/governance/source-of-truth.md)
+- Status: aligned 2026-11-24; existing architecture unchanged. Hono is used here only;
+  `zolai-core` remains authoritative for language data and the `zolai-mcp-server` Worker is legacy.
+
+### FRONTEND ALIGNMENT RECORD — zolai-web
+
+- Stack unchanged: Next.js stays. React + Vite + shadcn/ui patterns are reused where already present.
+- Next.js → Vite and React + Vite + API decoupling are **issues only** — not implemented here.
+- Component layer: shadcn/ui primary; no Ant Design added.
+
+### REUSE-FIRST RECORD — zolai-web
+
+- New components / UI kits: `none created — reused existing`.
+- No dependency edits; existing UI primitives and layouts reused.
+
+### BACKEND/CORE ALIGNMENT RECORD — zolai-web
+
+- Hono routes remain the only backend layer in this repo; `no @nestjs dependency found — do not add`.
+- Rust/Cargo: Cargo is Tauri native layer only (`../zolai-tauri/src-tauri/Cargo.toml`); no Rust service layer added.
