@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Quick verification script
-cd /home/peter/Documents/Projects/zolai/website/zolai-project
+# Run against this repo, wherever it lives (the old absolute path pointed at a
+# different project that no longer exists).
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 echo "🔍 Running Pre-Deployment Verification..."
 echo ""

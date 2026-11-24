@@ -19,7 +19,7 @@ bunx tsx scripts/import-vocab.ts             # import vocabulary
 ## Source data paths
 
 ```
-/home/peter/Documents/Projects/zolai/data/processed/
+$ZOLAI_PROJECTS/zolai/data/processed/
   master_dictionary_semantic.jsonl   # 24,891 ZO↔EN entries
   parallel.jsonl                     # 68,817 Bible + conversational
   sentences.jsonl                    # ~2M raw Zolai sentences
