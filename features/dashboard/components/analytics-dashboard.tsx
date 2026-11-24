@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { isDesktop } from "@/lib/runtime";
 import { useAnalyticsReport } from "@/features/dashboard/hooks/useAnalyticsReport";
-import type { AnalyticsPayload, DatasetAnalyticsReport } from "@/features/dashboard/api/analytics";
+import type { DatasetAnalyticsReport } from "@/features/dashboard/api/analytics";
 
 async function invokeDesktopRunKgBuild(): Promise<void> {
   const w = window as unknown as { __TAURI__?: { core?: { invoke?: (cmd: string, args?: unknown) => Promise<unknown> } } };
@@ -126,7 +126,7 @@ export function AnalyticsDashboard() {
               Run: <code>python scripts/maintenance/analytics/build_reports.py</code> then refresh.
             </div>
           )}
-          {payload?.datasetAnalytics && (
+          {!!payload?.datasetAnalytics && (
             <div className="space-y-1">
               <div className="text-muted-foreground">Sections:</div>
               <ul className="list-disc pl-5">
