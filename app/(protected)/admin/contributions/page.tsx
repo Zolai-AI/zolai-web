@@ -1,35 +1,14 @@
 "use client";
-import * as React from "react";
-
-type Contribution = {
-  id: string;
-  type: string;
-  zolaiText: string;
-  englishText: string;
-  notes?: string;
-  status: string;
-  createdAt: string;
-  submitter?: { name: string; email: string } | null;
-};
+import { useContributions } from "@/features/content-submission/hooks/useContributions";
+import { useContributionReview } from "@/features/content-submission/hooks/useContribution";
 
 export default function AdminContributionsPage() {
-  const [items, setItems] = React.useState<Contribution[]>([]);
+  const { data: items = [] } = useContributions();
+  const review = useContributionReview();
 
-  const load = React.useCallback(async () => {
-    const res = await fetch("/api/contributions");
-    if (res.ok) setItems(await res.json());
-  }, []);
-
-  async function act(id: string, action: "approve" | "reject") {
-    await fetch(`/api/contributions/${id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    void load();
+  function act(id: string, action: "approve" | "reject") {
+    review.mutate({ id, action });
   }
-
-  React.useEffect(() => { void load(); }, [load]);
 
   const pending = items.filter((i) => i.status === "pending");
   const done = items.filter((i) => i.status !== "pending");

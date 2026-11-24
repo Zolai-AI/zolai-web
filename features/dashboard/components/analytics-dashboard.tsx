@@ -4,24 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { isDesktop } from "@/lib/runtime";
-
-type AnalyticsPayload = {
-  kg: { nodeCount: number; edgeCount: number; chunkCount: number };
-  datasetAnalytics: unknown | null;
-};
-
-type DatasetAnalyticsFile = {
-  path?: string;
-  exists?: boolean;
-  sampledRows?: number;
-  textStats?: { count?: number; avg_len?: number; forbidden_hits?: Record<string, number> };
-};
-
-type DatasetAnalyticsReport = {
-  generatedAt?: string;
-  sampleLimit?: number;
-  files?: Record<string, DatasetAnalyticsFile>;
-};
+import { useAnalyticsReport } from "@/features/dashboard/hooks/useAnalyticsReport";
+import type { AnalyticsPayload, DatasetAnalyticsReport } from "@/features/dashboard/api/analytics";
 
 async function invokeDesktopRunKgBuild(): Promise<void> {
   const w = window as unknown as { __TAURI__?: { core?: { invoke?: (cmd: string, args?: unknown) => Promise<unknown> } } };
@@ -31,10 +15,15 @@ async function invokeDesktopRunKgBuild(): Promise<void> {
 }
 
 export function AnalyticsDashboard() {
-  const [payload, setPayload] = useState<AnalyticsPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const report = useAnalyticsReport();
+  const payload = report.data ?? null;
+  const [buildError, setBuildError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+
+  const error =
+    buildError ??
+    (report.error ? (report.error instanceof Error ? report.error.message : "Failed to load analytics") : null);
 
   useEffect(() => {
     if (!isDesktop()) return;
@@ -65,23 +54,6 @@ export function AnalyticsDashboard() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setError(null);
-        const res = await fetch("/api/zolai/analytics/report", { cache: "no-store" });
-        const json = (await res.json()) as { data?: AnalyticsPayload; message?: string };
-        if (!cancelled) setPayload(json.data ?? null);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load analytics");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const datasetSummary = useMemo(() => {
     const d = payload?.datasetAnalytics as DatasetAnalyticsReport | null;
     if (!d?.files) return [];
@@ -106,7 +78,7 @@ export function AnalyticsDashboard() {
                 setLogs([]);
                 await invokeDesktopRunKgBuild();
               } catch (e) {
-                setError(e instanceof Error ? e.message : "Failed to start KG build");
+                setBuildError(e instanceof Error ? e.message : "Failed to start KG build");
               } finally {
                 // running will be cleared by the "kg_build:done" event (desktop)
                 if (!isDesktop()) setRunning(false);

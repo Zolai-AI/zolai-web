@@ -1,21 +1,27 @@
 "use client";
 import { useState } from "react";
+import { useCreateContribution } from "@/features/content-submission/hooks/useContributions";
 
 export default function ContributePage() {
   const [tab, setTab] = useState<"word" | "sentence">("word");
   const [form, setForm] = useState({ zolaiText: "", englishText: "", notes: "" });
-  const [status, setStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const createContribution = useCreateContribution();
+  const status = createContribution.isPending
+    ? "sending"
+    : createContribution.isSuccess
+      ? "done"
+      : createContribution.isError
+        ? "error"
+        : "idle";
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
-    setStatus("sending");
-    const res = await fetch("/api/contributions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: tab, ...form }),
-    });
-    setStatus(res.ok ? "done" : "error");
-    if (res.ok) setForm({ zolaiText: "", englishText: "", notes: "" });
+    createContribution.mutate(
+      { type: tab, ...form },
+      {
+        onSuccess: () => setForm({ zolaiText: "", englishText: "", notes: "" }),
+      },
+    );
   }
 
   return (

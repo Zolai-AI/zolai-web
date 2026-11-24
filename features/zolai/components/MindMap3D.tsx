@@ -5,37 +5,13 @@ import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import SpriteText from "three-spritetext";
 import * as THREE from "three";
+import { useKgSnapshot } from "@/features/zolai/hooks/useKgSnapshot";
+import type { GraphData, GraphLink, GraphNode } from "@/features/zolai/types";
 
 // Dynamically import to avoid SSR issues with Three.js
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
 });
-
-// Graph data interfaces
-interface GraphNode {
-  id: string;
-  group: number;
-  val: number;
-  color: string;
-  desc: string;
-  fx?: number;
-  fy?: number;
-  fz?: number;
-  lat?: number; // degrees
-  lon?: number; // degrees
-}
-
-interface GraphLink {
-  source: string;
-  target: string;
-  color: string;
-  label: string;
-}
-
-interface GraphData {
-  nodes: GraphNode[];
-  links: GraphLink[];
-}
 
 const BREADCRUMB_KEY = "zolai:mind:breadcrumbs:v1";
 
@@ -216,7 +192,10 @@ export function MindMap3D() {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [graphData, setGraphData] = useState<GraphData>(defaultGraphData);
+  const kgSnapshot = useKgSnapshot();
+  // Falls back to the built-in graph while loading or if the snapshot is
+  // unavailable (previous behaviour: silent fallback).
+  const graphData = kgSnapshot.data ?? defaultGraphData;
   const [breadcrumbs, setBreadcrumbs] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -264,25 +243,6 @@ export function MindMap3D() {
       // ignore
     }
   }, [breadcrumbs]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/zolai/kg/snapshot", { cache: "no-store" });
-        if (!res.ok) return;
-        const payload = (await res.json()) as { data?: GraphData };
-        const next = payload?.data;
-        if (!next || !Array.isArray(next.nodes) || !Array.isArray(next.links)) return;
-        if (!cancelled) setGraphData(next);
-      } catch {
-        // ignore; fallback graph stays
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!viewportRef.current) return;

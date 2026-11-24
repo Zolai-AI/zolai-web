@@ -1,26 +1,38 @@
 "use client";
 
 import * as React from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAIModels } from "@/features/zolai/hooks/useAIModels";
+import { streamChat } from "@/features/zolai/lib/stream";
+import type { ChatMessage as ChatMsg } from "@/features/zolai/api/chat";
 
-type ChatMsg = { role: "user" | "assistant"; content: string };
+const DEFAULT_MODEL = "gemini-3-flash";
 
-function parseSseLines(buffer: string): { events: string[]; rest: string } {
-  const parts = buffer.split("\n\n");
-  const rest = parts.pop() ?? "";
-  return { events: parts, rest };
+function appendAssistantDelta(setter: React.Dispatch<React.SetStateAction<ChatMsg[]>>, delta: string) {
+  setter((prev) => {
+    const next = [...prev];
+    const lastIdx = next.length - 1;
+    if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
+      next[lastIdx] = { ...next[lastIdx], content: next[lastIdx].content + delta };
+    }
+    return next;
+  });
 }
 
-function extractDataLine(evt: string): string | null {
-  // Minimal SSE parsing: find first `data:` line and strip prefix.
-  const line = evt
-    .split("\n")
-    .map((l) => l.trimEnd())
-    .find((l) => l.startsWith("data:"));
-  if (!line) return null;
-  return line.replace(/^data:\s?/, "");
+function setAssistantContent(setter: React.Dispatch<React.SetStateAction<ChatMsg[]>>, content: string) {
+  setter((prev) => {
+    const next = [...prev];
+    const lastIdx = next.length - 1;
+    if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
+      next[lastIdx] = { ...next[lastIdx], content };
+    } else {
+      next.push({ role: "assistant", content });
+    }
+    return next;
+  });
 }
 
 export function ChatPanel() {
@@ -28,107 +40,46 @@ export function ChatPanel() {
     { role: "assistant", content: "Kum. What do you want to practice (Tedim)?" },
   ]);
   const [input, setInput] = React.useState("");
-  const [isStreaming, setIsStreaming] = React.useState(false);
-  const [models, setModels] = React.useState<string[]>([]);
-  const [model, setModel] = React.useState<string>("gemini-3-flash");
+  const [model, setModel] = React.useState<string>(DEFAULT_MODEL);
+
+  // Models come from the typed transport + react-query (endpoint is optional
+  // in some deployments — on failure we keep the current/default model only).
+  const modelsQuery = useAIModels();
+  const models = React.useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
 
   React.useEffect(() => {
-    let ignore = false;
-    void (async () => {
-      try {
-        const resp = await fetch("/api/zolai/ai/models");
-        if (!resp.ok) return;
-        const data = (await resp.json()) as { models?: Array<{ name?: string }>; detail?: unknown };
-        const names = (data.models ?? []).map((m) => m.name).filter((n): n is string => !!n);
-        if (!ignore && names.length > 0) {
-          setModels(names);
-          setModel((prev) => (names.includes(prev) ? prev : names[0]));
-        }
-      } catch {
-        // ignore: models endpoint is optional in some deployments
-      }
-    })();
-    return () => { ignore = true; };
-  }, []);
+    if (models.length > 0) setModel((prev) => (models.includes(prev) ? prev : models[0]));
+  }, [models]);
 
-  const send = React.useCallback(async () => {
+  // SSE streaming goes through the transport module inside a useMutation, so
+  // pending/error state is owned by react-query.
+  const sendMutation = useMutation({
+    mutationFn: (vars: { history: ChatMsg[]; text: string }) =>
+      streamChat(
+        {
+          // Zolai Toolkit expects messages with role/content
+          messages: [...vars.history, { role: "user", content: vars.text }],
+          model,
+        },
+        { onDelta: (delta) => appendAssistantDelta(setMessages, delta) },
+      ),
+  });
+  const isStreaming = sendMutation.isPending;
+
+  const send = React.useCallback(() => {
     const text = input.trim();
     if (!text || isStreaming) return;
 
     setInput("");
+    sendMutation.mutate({ history: messages, text });
     setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "" }]);
-    setIsStreaming(true);
+  }, [input, isStreaming, messages, sendMutation]);
 
-    try {
-      const resp = await fetch("/api/zolai/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Zolai Toolkit expects messages with role/content
-          messages: [
-            ...messages,
-            { role: "user", content: text },
-          ].map((m) => ({ role: m.role, content: m.content })),
-          model,
-        }),
-      });
-
-      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-
-        const { events, rest } = parseSseLines(buf);
-        buf = rest;
-
-        for (const evt of events) {
-          const dataStr = extractDataLine(evt);
-          if (!dataStr) continue;
-
-          let payload: unknown;
-          try {
-            payload = JSON.parse(dataStr);
-          } catch {
-            continue;
-          }
-
-          const p = payload as { delta?: string; done?: boolean; error?: string; thoughts?: string };
-          if (p.error) throw new Error(p.error);
-          if (p.delta) {
-            setMessages((prev) => {
-              const next = [...prev];
-              const lastIdx = next.length - 1;
-              if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
-                next[lastIdx] = { ...next[lastIdx], content: next[lastIdx].content + p.delta };
-              }
-              return next;
-            });
-          }
-          if (p.done) break;
-        }
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setMessages((prev) => {
-        const next = [...prev];
-        const lastIdx = next.length - 1;
-        if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
-          next[lastIdx] = { ...next[lastIdx], content: `Error: ${msg}` };
-        } else {
-          next.push({ role: "assistant", content: `Error: ${msg}` });
-        }
-        return next;
-      });
-    } finally {
-      setIsStreaming(false);
+  React.useEffect(() => {
+    if (sendMutation.isError) {
+      setAssistantContent(setMessages, `Error: ${sendMutation.error.message}`);
     }
-  }, [input, isStreaming, messages, model]);
+  }, [sendMutation.isError, sendMutation.error]);
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -179,11 +130,11 @@ export function ChatPanel() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                void send();
+                send();
               }
             }}
           />
-          <Button onClick={() => void send()} disabled={isStreaming || input.trim().length === 0}>
+          <Button onClick={send} disabled={isStreaming || input.trim().length === 0}>
             {isStreaming ? "Streaming…" : "Send"}
           </Button>
         </CardContent>
@@ -191,4 +142,3 @@ export function ChatPanel() {
     </div>
   );
 }
-

@@ -7,30 +7,37 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import type { ChatMessage as Msg } from "@/features/zolai/api/chat";
+import { useAIModels } from "@/features/zolai/hooks/useAIModels";
+import { useAIStatus } from "@/features/zolai/hooks/useAIStatus";
+import { useChatHistory, useChatMessages } from "@/features/zolai/hooks/useChatHistory";
+import { useChatSend } from "@/features/zolai/hooks/useChatSend";
 
-type Role = "user" | "assistant";
-type Msg = { role: Role; content: string };
+const DEFAULT_MODEL = "gemini-3-flash";
+const WELCOME: Msg = { role: "assistant", content: "Kum. What do you want to practice (Tedim)?" };
 
-type HistoryItem = {
-  id: string;
-  title?: string;
-  updated_at?: string;
-  model?: string;
-};
-
-function parseSseLines(buffer: string): { events: string[]; rest: string } {
-  const parts = buffer.split("\n\n");
-  const rest = parts.pop() ?? "";
-  return { events: parts, rest };
+function appendAssistantDelta(setter: React.Dispatch<React.SetStateAction<Msg[]>>, delta: string) {
+  setter((prev) => {
+    const next = [...prev];
+    const lastIdx = next.length - 1;
+    if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
+      next[lastIdx] = { ...next[lastIdx], content: next[lastIdx].content + delta };
+    }
+    return next;
+  });
 }
 
-function extractDataLine(evt: string): string | null {
-  const line = evt
-    .split("\n")
-    .map((l) => l.trimEnd())
-    .find((l) => l.startsWith("data:"));
-  if (!line) return null;
-  return line.replace(/^data:\s?/, "");
+function setLastAssistantContent(setter: React.Dispatch<React.SetStateAction<Msg[]>>, content: string) {
+  setter((prev) => {
+    const next = [...prev];
+    const lastIdx = next.length - 1;
+    if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
+      next[lastIdx] = { ...next[lastIdx], content };
+    } else {
+      next.push({ role: "assistant", content });
+    }
+    return next;
+  });
 }
 
 function useAutoScroll(dep: unknown) {
@@ -43,264 +50,105 @@ function useAutoScroll(dep: unknown) {
 }
 
 export function ChatApp() {
-  const [models, setModels] = React.useState<string[]>([]);
-  const [model, setModel] = React.useState<string>("gemini-3-flash");
-  const [history, setHistory] = React.useState<HistoryItem[]>([]);
+  // Models, chat history, and backend status are server caches owned by react-query.
+  const modelsQuery = useAIModels();
+  const models = React.useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
+  const historyQuery = useChatHistory();
+  const history = React.useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
+  const statusQuery = useAIStatus();
+
+  const [model, setModel] = React.useState<string>(DEFAULT_MODEL);
   const [threadId, setThreadId] = React.useState<string | null>(null);
   const [providerChatId, setProviderChatId] = React.useState<string | null>(null);
-  const [messages, setMessages] = React.useState<Msg[]>([
-    { role: "assistant", content: "Kum. What do you want to practice (Tedim)?" },
-  ]);
+  const [messages, setMessages] = React.useState<Msg[]>([WELCOME]);
   const [input, setInput] = React.useState("");
-  const [isStreaming, setIsStreaming] = React.useState(false);
-  const [statusText, setStatusText] = React.useState<string | null>(null);
-  const [statusOk, setStatusOk] = React.useState<boolean | null>(null);
+  const [sendNote, setSendNote] = React.useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState<boolean>(false);
 
   const messageListRef = useAutoScroll(messages);
 
-  const refreshModels = React.useCallback(async () => {
-    const resp = await fetch("/api/zolai/ai/models");
-    if (!resp.ok) throw new Error("Failed to load models");
-    const payload = await resp.json() as { success?: boolean; data?: unknown };
-    const arr = Array.isArray(payload?.data) ? payload.data : [];
-    const names = arr
-      .map((x: unknown) => (x && typeof x === "object" ? (x as { name?: unknown }).name : undefined))
-      .filter((n): n is string => typeof n === "string" && n.length > 0);
-    setModels(names);
-    if (names.length > 0 && !names.includes(model)) setModel(names[0]);
-  }, [model]);
+  // Keep the selected model valid once the catalogue arrives.
+  React.useEffect(() => {
+    if (models.length > 0 && !models.includes(model)) setModel(models[0]);
+  }, [models, model]);
 
-  const refreshHistory = React.useCallback(async () => {
-    const resp = await fetch("/api/zolai/ai/chats");
-    if (!resp.ok) throw new Error("Failed to load history");
-    const payload = await resp.json() as { success?: boolean; data?: unknown };
-    const items = Array.isArray(payload?.data) ? payload.data : [];
-    setHistory(
-      items
-        .map((x: unknown) => {
-          const obj = x && typeof x === "object" ? x as Record<string, unknown> : {};
-          return {
-            id: String(obj.id ?? ""),
-            title: typeof obj.title === "string" ? obj.title : undefined,
-            updated_at: typeof obj.updatedAt === "string" ? obj.updatedAt : (typeof obj.updated_at === "string" ? obj.updated_at : undefined),
-            model: typeof obj.model === "string" ? obj.model : undefined,
-          };
-        })
-        .filter((x: HistoryItem) => x.id.length > 0),
-    );
-  }, []);
+  const status = statusQuery.data;
+  const statusOk = status ? status.ok : null;
 
-  const refreshStatus = React.useCallback(async () => {
-    try {
-      const resp = await fetch("/api/zolai/ai/status");
-      if (!resp.ok) {
-        setStatusOk(false);
-        setStatusText(`Status check failed (HTTP ${resp.status}).`);
-        return;
-      }
-      const payload = await resp.json() as { success?: boolean; data?: { ok?: boolean; error?: unknown } };
-      if (payload?.success && payload?.data?.ok === true) {
-        setStatusOk(true);
-        setStatusText(null);
-        return;
-      }
-      setStatusOk(false);
-      const err = payload?.data?.error || payload?.error?.message || "Gemini server not ready (check cookies/credentials).";
-      setStatusText(String(err));
-    } catch (e) {
-      setStatusOk(false);
-      setStatusText(e instanceof Error ? e.message : "Status check failed.");
-    }
-  }, []);
+  // Opened thread: fetched by useChatMessages(threadId); applied to local chat
+  // state once per successful fetch so streaming edits are not clobbered.
+  const chatQuery = useChatMessages(threadId);
+  const appliedThreadRef = React.useRef<typeof chatQuery.data>(undefined);
+  const appliedThreadErrorRef = React.useRef<Error | null>(null);
 
   React.useEffect(() => {
-    void Promise.allSettled([refreshModels(), refreshHistory(), refreshStatus()]);
-  }, [refreshModels, refreshHistory, refreshStatus]);
-
-  const openChat = React.useCallback(async (id: string) => {
-    setThreadId(id);
-    setStatusText(null);
-    try {
-      const resp = await fetch(`/api/zolai/ai/chats/${encodeURIComponent(id)}`);
-      if (!resp.ok) throw new Error("Failed to load chat");
-      const payload = await resp.json() as { success?: boolean; data?: { providerChatId?: unknown; messages?: Array<{ role?: unknown; content?: unknown }> } };
-      const thread = payload?.data;
-      setProviderChatId(typeof thread?.providerChatId === "string" ? thread.providerChatId : null);
-      const msgs: Msg[] = (thread?.messages ?? [])
-        .map((t) => {
-          const obj = t && typeof t === "object" ? t as Record<string, unknown> : {};
-          return { role: obj.role === "user" ? "user" as const : "assistant" as const, content: String(obj.content ?? "") };
-        })
-        .filter((m: Msg) => m.content.trim().length > 0);
-      setMessages(msgs.length ? msgs : [{ role: "assistant", content: "Chat is empty." }]);
+    if (!threadId) return;
+    if (chatQuery.data && chatQuery.data !== appliedThreadRef.current) {
+      appliedThreadRef.current = chatQuery.data;
+      setProviderChatId(chatQuery.data.providerChatId);
+      setMessages(chatQuery.data.messages.length ? chatQuery.data.messages : [{ role: "assistant", content: "Chat is empty." }]);
       setMobileSidebarOpen(false);
-    } catch (e) {
-      setMessages([{ role: "assistant", content: `Error loading chat: ${e instanceof Error ? e.message : "Unknown error"}` }]);
+    } else if (chatQuery.error && chatQuery.error !== appliedThreadErrorRef.current) {
+      appliedThreadErrorRef.current = chatQuery.error as Error;
+      setMessages([{ role: "assistant", content: `Error loading chat: ${chatQuery.error.message}` }]);
     }
+  }, [threadId, chatQuery.data, chatQuery.error]);
+
+  const openChat = React.useCallback((id: string) => {
+    setThreadId(id);
+    setProviderChatId(null);
+    setSendNote(null);
   }, []);
 
   const newChat = React.useCallback(() => {
     setThreadId(null);
     setProviderChatId(null);
-    setMessages([{ role: "assistant", content: "Kum. What do you want to practice (Tedim)?" }]);
-    setStatusText(null);
+    setMessages([WELCOME]);
+    setSendNote(null);
     setMobileSidebarOpen(false);
   }, []);
 
-  const ensureThread = React.useCallback(async (firstUserMessage: string): Promise<string> => {
-    if (threadId) return threadId;
-    const title = firstUserMessage.trim().slice(0, 60) || "New chat";
-    const resp = await fetch("/api/zolai/ai/chats", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, model, provider: "gemini-server" }),
-    });
-    if (!resp.ok) throw new Error("Failed to create chat");
-    const payload = await resp.json() as { data?: { id?: unknown } };
-    const id = String(payload?.data?.id ?? "");
-    if (!id) throw new Error("Failed to create chat");
-    setThreadId(id);
-    void refreshHistory();
-    return id;
-  }, [model, refreshHistory, threadId]);
+  // Send: thread creation, message persistence, SSE streaming, and the
+  // non-streaming fallback all live in the transports behind useChatSend.
+  const sendMutation = useChatSend();
+  const streaming = sendMutation.isPending;
 
-  const saveMessage = React.useCallback(async (id: string, role: Role, content: string) => {
-    if (!content.trim()) return;
-    await fetch(`/api/zolai/ai/chats/${encodeURIComponent(id)}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role, content }),
-    });
-  }, []);
+  const statusText =
+    sendNote ??
+    (status && !status.ok ? status.message : null);
 
-  const send = React.useCallback(async () => {
+  const send = React.useCallback(() => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || streaming) return;
 
     setInput("");
-    setIsStreaming(true);
-    setStatusText(null);
-
-    const id = await ensureThread(text);
-    await saveMessage(id, "user", text);
-    setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "" }]);
-
-    const streamOnce = async (): Promise<void> => {
-      const resp = await fetch("/api/zolai/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, { role: "user", content: text }],
-          model,
-          chat_id: providerChatId ?? undefined,
-        }),
-      });
-      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-
-        const { events, rest } = parseSseLines(buf);
-        buf = rest;
-
-        for (const evt of events) {
-          const dataStr = extractDataLine(evt);
-          if (!dataStr) continue;
-          let payload: Record<string, unknown> | null = null;
-          try {
-            payload = JSON.parse(dataStr) as Record<string, unknown>;
-          } catch {
-            continue;
+    setSendNote(null);
+    sendMutation.mutate(
+      {
+        chatId: threadId,
+        providerChatId,
+        model,
+        history: messages,
+        text,
+        onDelta: (delta) => appendAssistantDelta(setMessages, delta),
+        onChatCreated: (id) => setThreadId(id),
+        onProviderChatId: (id) => setProviderChatId(id),
+      },
+      {
+        onSuccess: (result) => {
+          if (result.usedFallback) {
+            setLastAssistantContent(setMessages, result.content);
+            setSendNote("Streaming failed; used fallback response.");
           }
-          if (payload?.error) throw new Error(String(payload.error));
-
-          if (payload?.chat_id && !providerChatId) {
-            const pcid = String(payload.chat_id);
-            setProviderChatId(pcid);
-            void fetch(`/api/zolai/ai/chats/${encodeURIComponent(id)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ providerChatId: pcid, model }),
-            });
-          }
-          if (payload?.delta) {
-            setMessages((prev) => {
-              const next = [...prev];
-              const lastIdx = next.length - 1;
-              if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
-                next[lastIdx] = { ...next[lastIdx], content: next[lastIdx].content + String(payload.delta) };
-              }
-              return next;
-            });
-          }
-        }
-      }
-    };
-
-    try {
-      await streamOnce();
-      // Persist assistant message after stream finishes
-      // We can't reliably read state synchronously; take it from rendered state after a tick
-      setTimeout(() => {
-        const latest = (document.querySelector("[data-chat-last-assistant]") as HTMLElement | null)?.innerText ?? "";
-        void saveMessage(id, "assistant", latest);
-        void refreshHistory();
-      }, 0);
-    } catch (e) {
-      // Fallback: try non-streaming once, then surface error.
-      try {
-        const resp2 = await fetch("/api/zolai/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [...messages, { role: "user", content: text }],
-            model,
-            chat_id: providerChatId ?? undefined,
-          }),
-        });
-        if (!resp2.ok) throw e;
-        const payload = await resp2.json() as { data?: { text?: unknown; message?: { content?: unknown }; chat_id?: unknown }; text?: unknown; chat_id?: unknown };
-        const content = String(payload?.data?.text ?? payload?.text ?? payload?.data?.message?.content ?? "");
-        const nextChatId = payload?.data?.chat_id ?? payload?.chat_id;
-        if (nextChatId && !providerChatId) setProviderChatId(String(nextChatId));
-        setMessages((prev) => {
-          const next = [...prev];
-          const lastIdx = next.length - 1;
-          if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
-            next[lastIdx] = { ...next[lastIdx], content: content || next[lastIdx].content };
-          } else {
-            next.push({ role: "assistant", content: content || "(no response)" });
-          }
-          return next;
-        });
-        void refreshHistory();
-        setStatusText("Streaming failed; used fallback response.");
-      } catch {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        setStatusText(msg);
-        setMessages((prev) => {
-          const next = [...prev];
-          const lastIdx = next.length - 1;
-          if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
-            next[lastIdx] = { ...next[lastIdx], content: `Error: ${msg}` };
-          } else {
-            next.push({ role: "assistant", content: `Error: ${msg}` });
-          }
-          return next;
-        });
-      }
-    } finally {
-      setIsStreaming(false);
-    }
-  }, [ensureThread, input, isStreaming, messages, model, providerChatId, refreshHistory, saveMessage]);
+        },
+        onError: (error) => {
+          setSendNote(error.message);
+          setLastAssistantContent(setMessages, `Error: ${error.message}`);
+        },
+      },
+    );
+  }, [input, streaming, sendMutation, threadId, providerChatId, model, messages]);
 
   return (
     <div className="h-[calc(100vh-180px)] min-h-[650px] rounded-xl border bg-background overflow-hidden">
@@ -325,7 +173,7 @@ export function ChatApp() {
                     "text-left rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors",
                     threadId === h.id ? "bg-muted/60" : "",
                   )}
-                  onClick={() => void openChat(h.id)}
+                  onClick={() => openChat(h.id)}
                 >
                   <div className="truncate font-medium">{h.title || h.id}</div>
                   {h.updated_at && <div className="truncate text-xs text-muted-foreground">{h.updated_at}</div>}
@@ -355,7 +203,7 @@ export function ChatApp() {
                         "text-left rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors",
                         threadId === h.id ? "bg-muted/60" : "",
                       )}
-                      onClick={() => void openChat(h.id)}
+                      onClick={() => openChat(h.id)}
                     >
                       <div className="truncate font-medium">{h.title || h.id}</div>
                       {h.updated_at && <div className="truncate text-xs text-muted-foreground">{h.updated_at}</div>}
@@ -404,7 +252,7 @@ export function ChatApp() {
                     className="h-8 rounded-md border bg-background px-2 text-sm"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    disabled={isStreaming}
+                    disabled={streaming}
                   >
                     {(models.length ? models : [model]).map((m) => (
                       <option key={m} value={m}>{m}</option>
@@ -412,7 +260,7 @@ export function ChatApp() {
                   </select>
                 </div>
 
-                <Button size="sm" variant="outline" onClick={() => void refreshStatus()} disabled={isStreaming}>
+                <Button size="sm" variant="outline" onClick={() => void statusQuery.refetch()} disabled={streaming}>
                   Status
                 </Button>
               </div>
@@ -446,7 +294,7 @@ export function ChatApp() {
                           : "bg-background border",
                       )}
                     >
-                      {m.content || (m.role === "assistant" && isStreaming ? "…" : "")}
+                      {m.content || (m.role === "assistant" && streaming ? "…" : "")}
                     </div>
                   </div>
                 ))}
@@ -464,13 +312,13 @@ export function ChatApp() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
-                    void send();
+                    send();
                   }
                 }}
-                disabled={isStreaming}
+                disabled={streaming}
               />
-              <Button onClick={() => void send()} disabled={isStreaming || input.trim().length === 0}>
-                {isStreaming ? "Streaming…" : "Send"}
+              <Button onClick={send} disabled={streaming || input.trim().length === 0}>
+                {streaming ? "Streaming…" : "Send"}
               </Button>
             </div>
             <div className="mx-auto w-full max-w-3xl mt-2 text-xs text-muted-foreground">
@@ -482,4 +330,3 @@ export function ChatApp() {
     </div>
   );
 }
-

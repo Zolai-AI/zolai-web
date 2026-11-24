@@ -1,32 +1,14 @@
 "use client";
-import * as React from "react";
 import Link from "next/link";
-
-type PipelineRun = {
-  jobId: string; stage: string; status: string;
-  recordsAdded: number; createdAt: string; error?: string;
-};
-type Stats = {
-  pendingContributions: number; subscriberCount: number;
-  lastPublish?: string; recentRuns: PipelineRun[];
-};
+import { useN8nDashboard, useTriggerPipeline } from "@/features/admin/hooks/useN8nDashboard";
 
 export default function N8nDashboardPage() {
-  const [stats, setStats] = React.useState<Stats | null>(null);
-  const [triggering, setTriggering] = React.useState(false);
+  const { data: stats = null } = useN8nDashboard();
+  const trigger = useTriggerPipeline();
 
-  const load = React.useCallback(async () => {
-    const res = await fetch("/api/admin/n8n-dashboard");
-    if (res.ok) setStats(await res.json());
-  }, []);
-
-  async function triggerPipeline() {
-    setTriggering(true);
-    await fetch(`${process.env.NEXT_PUBLIC_ZOLAI_API_URL ?? "http://localhost:8000"}/api/pipeline/trigger`, { method: "POST" });
-    setTimeout(() => { setTriggering(false); void load(); }, 2000);
+  function triggerPipeline() {
+    trigger.mutate();
   }
-
-  React.useEffect(() => { void load(); }, [load]);
 
   const statusColor = (s: string) =>
     ({ done: "text-green-600", error: "text-red-600", running: "text-blue-600" }[s] ?? "text-gray-500");
@@ -35,9 +17,9 @@ export default function N8nDashboardPage() {
     <div className="p-6 max-w-4xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Automation Dashboard</h1>
-        <button onClick={triggerPipeline} disabled={triggering}
+        <button onClick={triggerPipeline} disabled={trigger.isPending}
           className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">
-          {triggering ? "Triggering..." : "▶ Run Pipeline Now"}
+          {trigger.isPending ? "Triggering..." : "▶ Run Pipeline Now"}
         </button>
       </div>
 
